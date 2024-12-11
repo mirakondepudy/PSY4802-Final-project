@@ -1,0 +1,156 @@
+---
+title: "NSDUH_analysis"
+author: "Mira Kondepudy"
+date: "2024-10-13"
+output: html_document
+---
+
+Make a subset of the necessary variables:
+```{r}
+NSDUH2_2022 <- load("~/Documents/PSY4802/SAMHSA/NSDUH_2022.Rdata")
+library(dplyr)
+nsduh <- cbind.data.frame(NSDUH_2022[1:2], NSDUH_2022[263:268], NSDUH_2022[272:276], NSDUH_2022[278:280], NSDUH_2022[406:419], NSDUH_2022[1742:1742], NSDUH_2022[1746:1746], NSDUH_2022[2239:2253], NSDUH_2022[2418:2448])
+```
+
+More cleaning:
+```{r}
+nsduh <- cbind.data.frame(nsduh[1:22], nsduh[26:26], nsduh[29:29], nsduh[31:32], nsduh[34:34], nsduh[45:46], nsduh[54:78])
+```
+
+Recode the null answers to NA:
+```{r}
+replacement <- list(
+  alcever = c(85, 94, 97),
+  alctry = c(985, 991, 994, 997, 998),
+  alcyfu = c(9985, 9989, 9991, 9994, 9997, 9998, 9999),
+  alcmfu = c(85, 89, 91, 94, 97, 98, 99),
+  alcrec = c(85, 91, 97, 98),
+  alcyrtot = c(985, 991, 993, 994, 997, 998),
+  aldaypyr = c(985, 989, 991, 993, 994, 997, 998, 999),
+  aldaypmo = c(85, 89, 93, 91, 94, 97, 98, 99),
+  aldaypwk = c(85, 89, 93, 91, 94, 97, 98, 99),
+  alcdays = c(85, 91, 93, 94, 97, 98, 99),
+  AL30EST = c(93, 91, 94, 97, 98, 99),
+  ALCUS30D = c(975, 985, 991, 993, 994, 997, 998),
+  ALCBNG30D = c(80, 85, 91, 93, 94, 97, 98),
+  cadrlast = c(985, 991, 993, 994, 997, 998),
+  cocever = c(94, 97),
+  cocage = c(985, 991, 994, 997, 998),
+  cocyfu = c(9985, 9989, 9991, 9994, 9997, 9998, 9999),
+  cocmfu = c(85, 89, 91, 94, 97, 98, 99),
+  cocrec = c(91, 97, 98),
+  cocyrtot = c(985, 991, 993, 994, 997, 998),
+  ccdaypyr = c(985, 989, 991, 993, 994, 997, 998, 999),
+  COCUS30A = c(85, 91, 93, 94, 97, 98, 99),
+  sutoutalc = c(85, 91, 93, 94, 97, 98, 99),
+  sutoutcoc = c(85, 91, 93, 94, 97, 98, 99)
+)
+
+for (col in names(replacement)) {
+  for (val in replacement[[col]]) {
+    nsduh[[col]] [nsduh[[col]] == val] <- NA
+  }
+}
+```
+
+Separate the frequency of binge groups for alcohol:
+
+```{r}
+nsduh$alcuselevel <- NA
+nsduh$alcuselevel[nsduh$ALCBNG30D >= 15] <- "15 or more days of binge drinking"
+nsduh$alcuselevel[nsduh$ALCBNG30D < 15] <- "Less than 15 days of binge drinking"
+```
+
+Find the difference in seeking out mental health services between people with frequent and less frequent binge drinking. First: do with mhtnseekpy -- whether or not they thought they should receive therapy.
+** Both groups did not receive any therapy, the difference is in whether or not they think they should. 
+```{r}
+alcbyMH <- table(nsduh$alcuselevel, nsduh$mhtnseekpy)
+chisq.test(alcbyMH)
+```
+
+DF and graph for all participants -- binge vs mht seek
+```{r}
+alcMH <- nsduh %>% 
+  select(alcuselevel, mhtnseekpy) 
+alcMH <- na.omit(alcMH)
+
+library(ggplot2)
+library(viridis)
+library(jtools)
+
+ggplot(alcMH, aes(alcuselevel, fill = as.factor(mhtnseekpy))) + geom_bar(stat = "count") + 
+  xlab("Frequency of Alcohol Binging") + ylab("Number of Participants") + 
+  ggtitle("Comparison between Participants' Frequency of Alcohol Binging and \nIf They Think They Should Seek Mental Health Treatment") +
+  scale_fill_manual(values = c("royalblue", "orangered"),
+                     labels = c("1" = "Thought they should seek treatment", "2" = "Did not think they should seek treatment"),
+                     name = "Self-Reported Thoughts on Treatment") +
+  theme_apa()
+```
+
+DF and graph in binging for all participants that did seek mht
+```{r}
+alcMHyes <- alcMH %>% 
+  filter(mhtnseekpy == 1)
+
+ggplot(alcMHyes, aes(alcuselevel, fill = as.factor(mhtnseekpy))) + geom_bar(stat = "count") + 
+  xlab("Frequency of Alcohol Binging") + ylab("Number of Participants") + 
+  ggtitle("Difference in Binge Drinking Frequency in Participants \nThat Sought Out Mental Health Treatment ") + theme_minimal() + theme(legend.position="none") +
+  scale_fill_manual(values = "royalblue") +
+  theme_apa()
+```
+
+DF and graph: binging for all participants that did NOT seek mht
+```{r}
+alcMHno <- alcMH %>% 
+  filter(mhtnseekpy == 2)
+
+ggplot(alcMHno, aes(alcuselevel, fill = as.factor(mhtnseekpy))) + geom_bar(stat = "count") + 
+  xlab("Frequency of Alcohol Binging") + ylab("Number of Participants") + 
+  ggtitle("Difference in Binge Drinking Frequency in Participants That \nDid Not Seek Out Mental Health Treatment, But Thought They Should ") +
+  theme_minimal() + theme(legend.position="none") +
+  scale_fill_manual(values = "orangered") +
+  theme_apa()
+```
+
+Then: do regression with alcohol binge and mhtrtothpy -- actually received therapy (past year)
+```{r}
+summary(glm(mhtrtothpy ~ aldaypwk, data = nsduh, family = "binomial"))
+ggplot(nsduh, aes(aldaypwk, mhtrtothpy)) + geom_point(na.rm = TRUE, position = "dodge") + 
+  geom_smooth(method = "glm", method.args = list(family = "binomial"), se = FALSE, color = "royalblue") + 
+  xlab("Number of Days/Week Drank Alcohol in the Past 12 Months") + 
+  ylab("Received or Did Not Receive Mental Health Treatment") +
+  ggtitle("How Days/Week Spent Drinking Predicts \nReceiving Mental Health Treatment") +
+  theme_apa()
+```
+
+Correlate past year alcohol use and past 30 days cocaine use. (for all participants that used both alcohol and cocaine. it takes out all the participants with NA in either column)
+```{r}
+cor.test(nsduh$alcdays, nsduh$COCUS30A)
+ggplot(nsduh, aes(alcdays, COCUS30A)) + geom_point() + 
+  geom_smooth(method = "lm") +
+  xlab("Number of Days Had 1 or More Alcoholic Drinks in the Past 30 Days") +
+  ylab("Number of Days Used Cocaine in the Past 30 Days") +
+  ggtitle("Relationship between Cocaine Use and Alcohol Use in the Past 30 Days") + 
+  theme_apa()
+```
+
+Check distribution of sample:
+```{r}
+alcCoc <- nsduh %>% 
+  select(alcdays, COCUS30A) %>% 
+  filter(alcdays > 0 & COCUS30A > 0)
+
+chisq.test(alcCoc)
+
+ggplot(alcCoc, aes(alcdays)) + geom_histogram() + 
+  xlab("Days Used Alcohol in Past 30 Days") + 
+  ggtitle("Distribution of Alcohol Use in Past 30 Days") + 
+  theme_apa()
+ggplot(alcCoc, aes(COCUS30A)) + geom_histogram(fill = "blue") + 
+  xlab("Days Used Cocaine in Past 30 Days") + 
+  ggtitle("Distribution of Cocaine Use in Past 30 Days") + 
+  theme_apa()
+```
+
+
+
